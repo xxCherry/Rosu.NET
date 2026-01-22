@@ -1,0 +1,64 @@
+name: publish-nuget
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (e.g. 1.2.3)
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - name: download native libraries
+        shell: bash
+        run: |
+          mkdir -p Rosu.Net/runtimes/linux-x64/native Rosu.Net/runtimes/win-x64/native
+          curl -fsSL -o Rosu.Net/runtimes/linux-x64/native/librosu_pp.so "https://github.com/xxCherry/rosu-pp-c/releases/download/Release/librosu_pp.so"
+          curl -fsSL -o Rosu.Net/runtimes/win-x64/native/rosu_pp.dll "https://github.com/xxCherry/rosu-pp-c/releases/download/Release/rosu_pp.dll"
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: create NuGet package
+        run: dotnet pack Rosu.Net/Rosu.Net.csproj -c Release --output nuget -p:PackageVersion="${{ steps.version.outputs.version }}"
+
+      - name: upload NuGet package as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: nuget/*
+
+      - name: upload NuGet package as release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: nuget/*
+
+      - name: publish to NuGet
+        if: startsWith(github.ref, 'refs/tags/')
+        run: dotnet nuget push nuget/* --api-key "${NUGET_API_KEY}" --source "https://api.nuget.org/v3/index.json" --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
