@@ -14,7 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/%(RecursiveDir)" />
+    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/" TargetPath="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
